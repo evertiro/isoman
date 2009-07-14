@@ -1,0 +1,8 @@
+Version 0.3 (2009-04-28)
+	- Minor update to add man page
+
+Version 0.2 (2009-02-26)
+	- Updated to add check for wodim or cdrecord and proceed accordingly
+
+Version 0.1 (2009-02-26)
+	- Initial release

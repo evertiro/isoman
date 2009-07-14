@@ -1,0 +1,246 @@
+#!/bin/bash
+#
+# isoman - a simple iso manager
+# Copyright (C) 2009 Daniel J Griffiths <ghost1227@archlinux.us>
+# Thanks to
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.  
+
+############################################################
+# Configure stuff
+############################################################
+# ARG1/ARG2	= 	Don't screw with these, all they is
+#				create a variable storing any arguments
+# VER		=	You can change it if you want, but there's
+#				really no point... it's just gonna cause
+#				isoman to list it's version incorrectly
+# TITLE		=	Don't screw with this either, it's just
+#				there to make my life easier
+# TMP		=	This is the location of the isoman uses
+#				to store temp files (default /tmp/isoman)
+# VCD		=	Directory to mount cd images to
+#				(default /media/cdrom)
+############################################################
+
+ARG=$1
+ISO=$2
+OUT=$3
+VER=0.3
+TITLE="isoman $VER - a simple cd image manager"
+TMP=/tmp/isoman
+VCD=/media/cdrom
+ASK="\e[1;33m==>\e[1;37m"
+INFO="\e[1;34m==>\e[1;37m"
+ERROR="\e[1;31m==>\e[1;37m"
+SUCCESS="\e[1;32m==>\e[1;37m"
+RESET="\e[0m"
+if [ ! $3 ]; then
+	OUT=.
+fi
+
+############################################################
+# Version function - Displays version information
+############################################################
+version() {
+	echo "ISO Manager v$VER"
+}
+
+############################################################
+# Usage function - Displays usage information
+############################################################
+usage() {
+	version
+	echo
+	echo "Usage:"
+	echo "      isoman argument [isofile] [outdir/device]"
+	echo
+	echo "Arguments:"
+	echo "      -m, --mount    Mount [isofile] to $VCD"
+	echo "      -u, --umount   Unmount [isofile]"
+	echo "      -x, --extract  Extract [isofile] to [outdir]"
+	echo "      -b, --burn     Burn [isofile] to [device]"
+	echo "      -h, --help     This message"
+	echo "      -v, --version  Output version information and exit"
+}
+
+############################################################
+# Fail function
+############################################################
+fail() {
+	echo -e "$ERROR An unknown error occurred!$RESET"
+	exit
+}
+
+############################################################
+# Mount function
+############################################################
+mount() {
+	if [ -f "$ISO" ]; then
+		FILE=`file -b "$ISO" | cut -f1 -d' '`
+		if [ $FILE != "ISO" ]; then
+			echo -e "$ERROR File $ISO is not in ISO format!$RESET"
+		else
+			echo -e "$INFO Mounting $ISO to $VCD...$RESET"
+			sudo mount -o loop "$ISO" "$VCD" || fail
+			echo -e  "$SUCCESS Done!$RESET"
+		fi
+	else
+		echo -e "$ERROR File $ISO does not exist!$RESET"
+		exit
+	fi
+	exit
+}
+
+############################################################
+# Unmount function
+############################################################
+umount() {
+	echo -e "$INFO Unmounting image located at $VCD...$RESET"
+	sudo umount "$VCD" || fail
+	echo -e  "$SUCCESS Done!$RESET"
+	exit
+}
+
+############################################################
+# Extract function
+############################################################
+extract() {
+	if [ -f "$ISO" ]; then
+		FILE=`file -b "$ISO" | cut -f1 -d' '`
+		if [ $FILE != "ISO" ]; then
+			echo -e "$ERROR File $ISO is not in ISO format!$RESET"
+		else
+			echo -e "$INFO Mounting $ISO to $VCD...$RESET"
+			sudo mount -o loop "$ISO" "$VCD" || fail
+			BASE=`basename "$ISO" .iso`
+			echo -e "$INFO Extracting $ISO contents to $OUT/$BASE...$RESET"
+			mkdir "$OUT/$BASE"
+			cp -Rv $VCD/* "$OUT/$BASE" || fail
+			chmod -R u+w "$OUT/$BASE"
+			echo -e "$SUCCESS Extraction completed successfully!$RESET"
+			echo -e "$INFO Unmounting $ISO...$RESET"
+			sudo umount "$VCD" || return 1
+			echo -e  "$SUCCESS Done!$RESET"
+			exit
+		fi
+	else
+		echo -e "$ERROR File $ISO does not exist!$RESET"
+		exit
+	fi
+	exit
+	
+}
+
+############################################################
+# Burn function
+############################################################
+burn() {
+	FILE=`file -b "$ISO" | cut -f1 -d' '`
+	if [ $FILE != "ISO" ]; then
+		echo -e "$ERROR File $ISO is not in ISO format!$RESET"
+	else
+		if [ -f /usr/bin/wodim ]; then
+			BURN=wodim
+		elif [ -f /usr/bin/cdrecord ]; then
+			BURN=cdrecord
+		else
+			echo -e "$ERROR No usable burning software found!$RESET"
+			exit
+		fi
+		if [ $OUT != "." ]; then
+			echo -e "$INFO Burning $ISO to device located at $OUT...$RESET"
+			$BURN -s dev=$OUT "$ISO" || fail
+			echo -e "$SUCCESS Done!$RESET"
+			exit
+		else
+			echo -e "$INFO No device specified, trying to autodetect cd burner...$RESET"
+			$BURN -s "$ISO" || fail
+			echo -e "$SUCCESS Done!$RESET"
+			exit
+		fi
+	fi
+	exit
+}
+
+############################################################
+# Install function
+############################################################
+inst() {
+	if [ -d /tmp/isoman ]; then
+		rm -R /tmp/isoman
+	fi
+	mkdir -p /tmp/isoman
+	cd /tmp/isoman
+	if [ -f $INSTALL.tar.gz ]; then
+		echo -e "$SUCCESS Package $INSTALL already exists in build directory.$RESET"
+	else
+		echo -e "$INFO Downloading package $INSTALL...$RESET"
+		wget -nv http://aur.archlinux.org/packages/$INSTALL/$INSTALL.tar.gz
+		if [ ! -f $INSTALL.tar.gz ]; then
+			fail
+		else
+			echo -e "$SUCCESS Package $INSTALL downloaded successfully.$RESET"
+		fi
+	fi
+	echo -e "$INFO Extracting package $INSTALL...$RESET"
+	tar -xf $INSTALL.tar.gz
+	cd $INSTALL
+	echo -e "$INFO Beginning make process for $INSTALL...$RESET"
+	makepkg -f
+	if [ ! -f $INSTALL*.pkg.tar.gz ]; then
+		echo -e "$ERROR Running makepkg for package $INSTALL failed."
+		fail
+	else
+		echo -e "$SUCCESS Running makepkg for package $INSTALL completed successfully.$RESET"
+		echo -e "$INFO Now installing package $INSTALL...$RESET"
+		PKGVER=`ls $INSTALL*.pkg.tar.gz | sed s/$INSTALL-// | sed s/-`arch`.pkg.tar.gz//`
+		sudo pacman -U $INSTALL-$PKGVER-`arch`.pkg.tar.gz
+		INSTVER=`pacman -Q $INSTALL`
+		if [ "$INSTVER" != "$INSTALL $PKGVER" ]; then
+			echo -e "$ERROR Installation of package $INSTALL failed, exiting.$RESET"
+			fail
+		else
+			echo -e "$SUCCESS Installation of package $INSTALL completed successfully.$RESET"
+		fi
+	fi
+}
+
+############################################################
+# Check arguments passed at runtime
+############################################################
+case "$1" in
+	'-m'|'--mount')
+	mount
+	;;
+	'-u'|'--umount')
+	umount
+	;;
+	'-x'|'--extract')
+	extract
+	;;
+	'-b'|'--burn')
+	burn
+	;;
+	''|'-h'|'--help')
+	usage
+	;;
+	'-v'|'--version')
+	version
+	;;
+	*)
+	usage
+	;;
+esac
